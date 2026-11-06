@@ -1,5 +1,7 @@
 # Portfolio Risk Analyzer
 
+![Portfolio risk analyzer: historical, parametric and Monte Carlo VaR with Expected Shortfall](assets/cover.jpg)
+
 A quantitative portfolio risk analysis tool built in Python. Computes Value-at-Risk using three distinct methodologies, Expected Shortfall, drawdown analysis, and mean-variance portfolio optimization with efficient frontier visualization.
 
 Built as part of a self-directed quantitative finance project alongside M2 Financial Economics studies at Université Paris 1 Panthéon-Sorbonne.
@@ -91,3 +93,9 @@ portfolio-risk-analyzer/
 
 - Python 3.9+
 - yfinance, pandas, numpy, scipy, matplotlib, seaborn
+
+## Author
+
+Davide Pellegrino · M2 Financial Economics, Université Paris 1 Panthéon-Sorbonne · [LinkedIn](https://www.linkedin.com/in/pellegrino-davide/)
+
+Other projects: [Sanctions and privacy coins (M1 thesis)](https://github.com/davidepellegrino-stack/sanctions-privacy-coins) · [Credit scoring model](https://github.com/davidepellegrino-stack/credit-scoring-model)
