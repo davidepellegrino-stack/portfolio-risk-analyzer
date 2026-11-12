@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: marketrisk
+Version: 2.0.0
+Summary: Out-of-sample VaR and Expected Shortfall models with regulatory backtesting
+Requires-Python: >=3.10
+License-File: LICENSE
+Requires-Dist: numpy>=1.23
+Requires-Dist: pandas>=2.0
+Requires-Dist: scipy>=1.9
+Requires-Dist: arch>=6.0
+Requires-Dist: yfinance>=0.2.40
+Requires-Dist: matplotlib>=3.6
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Dynamic: license-file
