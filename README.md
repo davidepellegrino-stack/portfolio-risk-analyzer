@@ -79,9 +79,20 @@ portfolio-risk-analyzer/
 ├── outputs/
 │   ├── figures/            # PNG charts
 │   └── tables/             # CSV result tables
+├── tests/                  # pytest suite (synthetic data, no network)
+├── .github/workflows/ci.yml
 ├── requirements.txt
 └── README.md
 ```
+
+## Tests
+
+```bash
+pip install -r requirements.txt pytest
+pytest -q
+```
+
+The suite runs offline on seeded synthetic returns and checks the numbers against known answers: historical VaR and ES on a uniform grid, parametric VaR/ES against their closed forms, VaR monotonic in the confidence level, CVaR ≥ VaR, Monte Carlo VaR within 10% of the √h-scaled parametric value, maximum drawdown (peak, trough, recovery) on a hand-built path, and the minimum-variance portfolio against the analytic solution Σ⁻¹1 / (1ᵀΣ⁻¹1). GitHub Actions runs it on Python 3.10 and 3.12.
 
 ## Methodology Notes
 
@@ -91,7 +102,7 @@ portfolio-risk-analyzer/
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - yfinance, pandas, numpy, scipy, matplotlib, seaborn
 
 ## Author
