@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "marketrisk"
+version = "2.0.0"
+description = "Out-of-sample VaR and Expected Shortfall models with regulatory backtesting"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.23", "pandas>=2.0", "scipy>=1.9", "arch>=6.0", "yfinance>=0.2.40", "matplotlib>=3.6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,4 @@
+scenario,from,to,days,portfolio_return_%,worst_asset,worst_asset_return_%
+COVID crash,2020-02-19,2020-03-23,24,-31.90,BNP.PA,-52.63
+2022 rate shock,2022-01-03,2022-09-30,193,-16.54,ASML,-39.33
+April 2025 tariff shock,2025-04-02,2025-04-08,5,-13.39,AAPL,-23.43
