@@ -44,6 +44,32 @@ def test_independence_against_hand_calculation():
     assert backtest.christoffersen_independence(hits)[0] == pytest.approx(-2 * (ll_null - ll_alt), abs=1e-12)
 
 
+def test_dq_with_constant_only_is_the_score_test_of_coverage():
+    # No lags and a flat VaR leave only the intercept: DQ = T (pi - a)^2 / (a (1 - a)), chi2(1).
+    hits = np.zeros(1000, dtype=int)
+    hits[::50] = 1                          # 20 exceedances, 10 expected
+    dq, p = backtest.dynamic_quantile(hits, np.full(1000, 0.02), 0.01, lags=0)
+    assert dq == pytest.approx(1000 * (0.02 - 0.01) ** 2 / (0.01 * 0.99))
+    assert p == pytest.approx(stats.chi2.sf(dq, 1))
+
+
+def test_dq_sees_dependence_at_two_days_that_christoffersen_misses():
+    hits = np.zeros(2000, dtype=int)
+    starts = np.arange(100, 2000, 200)
+    hits[starts] = hits[starts + 2] = 1     # 20 exceedances in pairs two days apart
+    var = np.random.default_rng(0).uniform(0.02, 0.03, 2000)
+    assert backtest.christoffersen_independence(hits)[1] > 0.4
+    assert backtest.dynamic_quantile(hits, var, 0.01)[1] < 1e-6
+
+
+def test_dq_flags_exceedances_that_depend_on_the_var_level():
+    var = np.where(np.arange(2000) < 1000, 0.01, 0.03)
+    hits = np.zeros(2000, dtype=int)
+    hits[25:1000:50] = 1                    # all 20 fall on low-VaR days: right count overall
+    assert backtest.kupiec_pof(20, 2000, 0.01)[1] > 0.99
+    assert backtest.dynamic_quantile(hits, var, 0.01, lags=1)[1] < 0.01
+
+
 @pytest.mark.parametrize("n, zone", [(0, "green"), (4, "green"), (5, "yellow"),
                                      (9, "yellow"), (10, "red"), (25, "red")])
 def test_traffic_light_reproduces_basel_table(n, zone):
@@ -58,6 +84,7 @@ def test_correct_model_passes_every_test(normal_returns):
                       "es_975": 0.01 * models.normal_es(0.025)}, index=r.index)
     res = backtest.backtest_model(r, f)
     assert res["kupiec_p"] > 0.05 and res["cond_coverage_p"] > 0.05
+    assert res["dq_p"] > 0.05               # flat VaR: the collinear regressor is dropped
     assert abs(res["es_z2"]) < 0.35
 
 

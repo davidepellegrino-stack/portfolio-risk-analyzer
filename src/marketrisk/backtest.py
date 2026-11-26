@@ -1,7 +1,8 @@
 """Backtests of VaR and ES forecasts against realised returns.
 
 VaR  : Kupiec (1995) unconditional coverage, Christoffersen (1998) independence
-       and conditional coverage, Basel traffic light.
+       and conditional coverage, Engle-Manganelli (2004) dynamic quantile,
+       Basel traffic light.
 ES   : Acerbi and Szekely (2014) Z2 statistic.
 Rank : quantile (pinball) loss for VaR, Fissler-Ziegel FZ0 loss for (VaR, ES).
 """
@@ -63,6 +64,31 @@ def conditional_coverage(hits: np.ndarray, alpha: float) -> tuple[float, float]:
     h = np.asarray(hits).astype(int)
     lr = kupiec_pof(int(h.sum()), len(h), alpha)[0] + christoffersen_independence(h)[0]
     return lr, stats.chi2.sf(lr, 2)
+
+
+def dynamic_quantile(hits: np.ndarray, var: np.ndarray, alpha: float,
+                     lags: int = 4) -> tuple[float, float]:
+    """Engle and Manganelli (2004) out-of-sample dynamic quantile (DQ) test.
+
+    With Hit_t = I_t - alpha, a correct model makes Hit_t unpredictable from
+    anything known at t-1. Regress it by OLS on X = [1, Hit_{t-1} ... Hit_{t-lags},
+    VaR_t]. H0: all coefficients are zero.
+
+        DQ = b' X'X b / (alpha * (1 - alpha))  ~  chi2(number of regressors)
+
+    It sees what the Christoffersen test cannot: dependence beyond one day, and
+    exceedances that are more likely when the VaR forecast is high (or low).
+    """
+    hit = np.asarray(hits).astype(float) - alpha
+    var = np.asarray(var, dtype=float)
+    y = hit[lags:]
+    X = np.column_stack([np.ones(len(y))]
+                        + [hit[lags - k:-k] for k in range(1, lags + 1)]
+                        + [var[lags:]])
+    beta, _, rank, _ = np.linalg.lstsq(X, y, rcond=None)
+    fitted = X @ beta                       # b' X'X b is the squared length of X b
+    dq = float(fitted @ fitted / (alpha * (1 - alpha)))
+    return dq, float(stats.chi2.sf(dq, rank))   # rank < columns if a regressor is constant
 
 
 def traffic_light(n_exceed: int, n_obs: int = 250, alpha: float = 0.01) -> str:
@@ -135,6 +161,7 @@ def backtest_model(returns: pd.Series, forecast: pd.DataFrame,
         "kupiec_p": kupiec_pof(x, T, var_alpha)[1],
         "independence_p": christoffersen_independence(hits.to_numpy())[1],
         "cond_coverage_p": conditional_coverage(hits.to_numpy(), var_alpha)[1],
+        "dq_p": dynamic_quantile(hits.to_numpy(), forecast["var_99"].to_numpy(), var_alpha)[1],
         "max_exceed_250d": int(roll.max()),
         "green_%": round(100 * (zones == "green").mean(), 1),
         "yellow_%": round(100 * (zones == "yellow").mean(), 1),

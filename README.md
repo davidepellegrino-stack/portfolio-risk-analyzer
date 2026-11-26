@@ -34,6 +34,7 @@ The first 1,000 days are used for estimation only. Every model then forecasts ea
 | Kupiec coverage, p | 0.026 | <0.001 | <0.001 | 0.420 | **0.950** |
 | Christoffersen independence, p | 0.001 | <0.001 | 0.084 | 0.031 | 0.014 |
 | Conditional coverage, p | <0.001 | <0.001 | <0.001 | 0.071 | 0.050 |
+| Dynamic quantile (4 lags + VaR), p | <0.001 | <0.001 | <0.001 | <0.001 | <0.001 |
 | Worst 250-day window, exceedances | 14 | 17 | 13 | 11 | 10 |
 | Share of 250-day windows in Basel red zone | 12.4% | 24.4% | 4.4% | 1.9% | 0.1% |
 | ES test Z2 (97.5%; below −0.7 rejects) | −0.30 | −0.65 | −0.65 | −0.18 | **−0.06** |
@@ -46,7 +47,7 @@ What the table says:
 1. **The normal tail is the problem, not only the volatility.** EWMA volatility reacts within days and nearly removes the clustering (independence p = 0.08), yet it still has 44 exceedances. A fast volatility with a normal quantile is too low at 99%.
 2. **Historical simulation is slow, not cheap.** It has the highest average VaR and still fails, because the VaR is flat going into a crisis and stays high for two years after it. On 12 March 2020 the portfolio lost 10.5%; historical simulation forecast 3.1%, filtered HS 8.8%.
 3. **Capital is not the trade-off.** Filtered HS has a lower average VaR than historical simulation (3.05% against 3.28%) and spends less time outside the green zone (24% of 250-day windows against 37%). It puts the capital on the right days.
-4. **No model is clean.** Filtered HS has exactly the expected number of exceedances, but independence is rejected (p = 0.014): several exceedances come on consecutive days at the start of each shock, before GARCH volatility has caught up. Conditional coverage sits on the 5% line (p = 0.0497).
+4. **No model is clean.** Filtered HS has exactly the expected number of exceedances, but independence is rejected (p = 0.014): several exceedances come on consecutive days at the start of each shock, before GARCH volatility has caught up. Conditional coverage sits on the 5% line (p = 0.0497). The dynamic quantile test, which also looks at lags two to four and at the VaR level, rejects all five. For GARCH-t and filtered HS the VaR level is not the issue (with the intercept and VaR alone, p = 0.71 and 0.93): the rejection comes from the lags. The chi-squared p-value rests on very few pairs of exceedances at 99%, so read its size with caution.
 5. **ES is harder to reject than VaR.** No model fails Z2, although the two normal models are close to the threshold. With about 50 tail observations the test has little power, which is a known weakness of ES backtesting.
 
 ![Exceedances over the trailing 250 days against the Basel zones](results/figures/traffic_light.png)
@@ -76,7 +77,7 @@ git clone https://github.com/davidepellegrino-stack/portfolio-risk-analyzer.git
 cd portfolio-risk-analyzer
 pip install -e ".[dev]"
 python -m marketrisk.run      # downloads data once, writes results/ (about 15 seconds)
-pytest -q                     # 35 tests, no network
+pytest -q                     # 38 tests, no network
 ```
 
 Yahoo Finance revises adjusted prices when dividends are paid, so a fresh download can move the figures slightly.
@@ -86,7 +87,7 @@ src/marketrisk/
   config.py        every parameter that affects a result
   data.py          EUR conversion, calendar, simple returns, portfolio P&L
   models.py        the five VaR / ES forecasters
-  backtest.py      Kupiec, Christoffersen, traffic light, Z2, scoring losses
+  backtest.py      Kupiec, Christoffersen, DQ, traffic light, Z2, scoring losses
   stress.py        historical scenarios, worst losses, stressed VaR
   attribution.py   component VaR and component ES
   run.py           end-to-end pipeline
@@ -99,6 +100,7 @@ results/           tables and figures from the run described above
 The tests check numbers, not only that the code runs:
 
 - Kupiec and Christoffersen statistics against hand calculations; the traffic light against the Basel table (4 / 5 / 9 / 10 exceedances).
+- Dynamic quantile: equals the coverage score test with no lags and a flat VaR; catches exceedances two days apart, or tied to the VaR level, that the other tests miss.
 - Student-t ES against numerical integration of the density.
 - No look-ahead: changing future returns leaves every past forecast unchanged, for all five models.
 - On simulated normal data the true model passes every backtest, and an ES forecast cut in half is rejected by Z2.
@@ -121,6 +123,7 @@ The tests check numbers, not only that the code runs:
 - Basel Committee on Banking Supervision (1996). Supervisory framework for the use of backtesting in conjunction with the internal models approach to market risk capital requirements.
 - Basel Committee on Banking Supervision (2019). Minimum capital requirements for market risk.
 - Christoffersen, P. (1998). Evaluating interval forecasts. *International Economic Review* 39(4).
+- Engle, R. and Manganelli, S. (2004). CAViaR: conditional autoregressive Value at Risk by regression quantiles. *Journal of Business & Economic Statistics* 22(4).
 - Fissler, T. and Ziegel, J. (2016). Higher order elicitability and Osband's principle. *Annals of Statistics* 44(4).
 - Kupiec, P. (1995). Techniques for verifying the accuracy of risk measurement models. *Journal of Derivatives* 3(2).
 - McNeil, A., Frey, R. and Embrechts, P. (2015). *Quantitative Risk Management*, revised edition. Princeton University Press.
