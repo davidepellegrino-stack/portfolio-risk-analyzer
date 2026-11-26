@@ -75,3 +75,19 @@ def test_all_models_share_forecast_dates(normal_returns):
     hs, nr, ew = models.historical_simulation(r), models.normal_rolling(r), models.ewma_normal(r)
     assert hs.index.equals(nr.index) and nr.index.equals(ew.index)
     assert len(hs) == 60 and not hs.isna().any().any() and not nr.isna().any().any()
+
+
+def test_run_all_fits_garch_once_and_returns_the_parameters_used(normal_returns, monkeypatch):
+    calls = []
+    original = models.garch_models
+
+    def counted(returns):
+        calls.append(original(returns))
+        return calls[-1]
+
+    monkeypatch.setattr(models, "garch_models", counted)
+    forecasts, params = models.run_all(normal_returns.iloc[:1100])
+    assert len(calls) == 1
+    assert forecasts["GARCH-t"] is calls[0][0] and forecasts["Filtered HS"] is calls[0][1]
+    assert params is calls[0][2]
+    assert len({tuple(f.index) for f in forecasts.values()}) == 1   # same out-of-sample dates

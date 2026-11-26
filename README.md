@@ -77,7 +77,7 @@ git clone https://github.com/davidepellegrino-stack/portfolio-risk-analyzer.git
 cd portfolio-risk-analyzer
 pip install -e ".[dev]"
 python -m marketrisk.run      # downloads data once, writes results/ (about 15 seconds)
-pytest -q                     # 38 tests, no network
+pytest -q                     # 39 tests, no network
 ```
 
 Yahoo Finance revises adjusted prices when dividends are paid, so a fresh download can move the figures slightly.

@@ -16,14 +16,13 @@ def main(refresh: bool = False) -> None:
     port = data.portfolio_returns(asset_returns, weights)
     print(f"{len(port)} daily returns, {port.index[0].date()} to {port.index[-1].date()}, in {cfg.BASE_CCY}")
 
-    forecasts = models.run_all(port)
+    forecasts, garch_params = models.run_all(port)
     oos = next(iter(forecasts.values())).index
     print(f"Out-of-sample: {len(oos)} days from {oos[0].date()}")
 
     results = backtest.backtest_all(port, forecasts)
     results.to_csv(cfg.TABLES_DIR / "backtest_summary.csv", float_format="%.4f")
     pd.concat(forecasts, axis=1).to_csv(cfg.TABLES_DIR / "forecasts.csv", float_format="%.6f")
-    _, _, garch_params = models.garch_models(port)
     garch_params.to_csv(cfg.TABLES_DIR / "garch_parameters.csv", float_format="%.4f")
 
     scen = stress.historical_scenarios(asset_returns, weights, cfg.STRESS_SCENARIOS)

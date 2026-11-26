@@ -152,13 +152,18 @@ def garch_models(returns: pd.Series, window: int = cfg.GARCH_WINDOW,
             pd.DataFrame(params, columns=["date", "omega", "alpha", "beta", "nu"]).set_index("date"))
 
 
-def run_all(returns: pd.Series) -> dict[str, pd.DataFrame]:
-    """All five models on the same out-of-sample dates."""
-    garch_t, fhs, _ = garch_models(returns)
-    return {
+def run_all(returns: pd.Series) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
+    """All five models on the same out-of-sample dates.
+
+    Returns (forecasts by model name, GARCH parameters by refit date). GARCH-t
+    and FHS share one set of fits, so the parameters saved are the ones used.
+    """
+    garch_t, fhs, garch_params = garch_models(returns)
+    forecasts = {
         "Historical simulation": historical_simulation(returns),
         "Normal (rolling)": normal_rolling(returns),
         "EWMA normal": ewma_normal(returns),
         "GARCH-t": garch_t,
         "Filtered HS": fhs,
     }
+    return forecasts, garch_params
