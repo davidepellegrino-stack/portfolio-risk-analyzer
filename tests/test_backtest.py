@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from scipy import stats
 
-from marketrisk import attribution, backtest, models, stress
+from marketrisk import attribution, backtest, models, simulate, stress
 
 
 def test_kupiec_is_zero_when_hit_rate_equals_alpha():
@@ -143,3 +143,57 @@ def test_scenario_compounds_buy_and_hold():
 def test_stressed_var_is_at_least_current_var(normal_returns):
     s = stress.stressed_var(normal_returns)
     assert s["stressed_var_%"] >= s["current_var_%"] > 0
+
+
+def _normal_setup(r, vol=0.01):
+    """A model that says r_t ~ N(0, vol^2): VaR, ES and sampler all agree."""
+    sigma = np.full(len(r), vol)
+    var = pd.Series(sigma * models.normal_var(0.025), index=r.index)
+    es = pd.Series(sigma * models.normal_es(0.025), index=r.index)
+    return var, es, simulate.normal_sampler(sigma)
+
+
+def test_z2_simulated_p_value_accepts_true_model_and_rejects_low_es(normal_returns):
+    r = normal_returns
+    for scale, low, high in [(0.01, 0.05, 1.0), (0.007, 0.0, 0.01)]:
+        var, es, sampler = _normal_setup(r, scale)   # data have vol 1%
+        z = backtest.es_z2(r, var, es, 0.025)
+        p, crit = backtest.es_z2_test(var, es, 0.025, sampler, z, n_sim=2000)
+        assert low <= p <= high and crit < 0
+
+
+def test_z2_p_value_bounds_and_reproducibility(normal_returns):
+    var, es, sampler = _normal_setup(normal_returns.iloc[:500])
+    def run(z_obs, chunk=100):
+        return backtest.es_z2_test(var, es, 0.025, sampler, z_obs, n_sim=999, chunk=chunk)
+    assert run(-100.0)[0] == pytest.approx(1 / 1000)   # never zero
+    assert run(100.0)[0] == pytest.approx(1.0)
+    assert run(-0.2) == run(-0.2) == run(-0.2, chunk=999)
+
+
+def test_samplers_reproduce_the_forecast_tail():
+    """Each sampler must breach its own 97.5% VaR 2.5% of the time, with mean breach ES."""
+    nu, sigma = np.full(4, 6.0), np.array([0.01, 0.02, 0.01, 0.03])
+    r = simulate.student_sampler(sigma, nu)(np.random.default_rng(1), 200_000)
+    breach = r < -sigma * models.student_var(0.025, 6.0)
+    assert breach.mean(axis=0) == pytest.approx(np.full(4, 0.025), abs=0.002)
+    assert (-r / sigma)[breach].mean() == pytest.approx(models.student_es(0.025, 6.0), rel=0.03)
+
+
+def test_empirical_sampler_draws_each_day_from_its_own_scaled_pool():
+    pools = np.array([[1.0, 2.0], [10.0, 20.0]])
+    r = simulate.empirical_sampler(pools, np.array([1.0, 0.5]))(np.random.default_rng(0), 500)
+    assert set(r[:, 0]) == {1.0, 2.0} and set(r[:, 1]) == {5.0, 10.0}
+
+
+def test_model_samplers_use_only_past_returns_and_the_refit_in_use(normal_returns):
+    r = normal_returns.iloc[:1300]
+    residuals: dict = {}
+    forecasts, params = models.run_all(r, residuals=residuals)
+    assert list(residuals) == list(params.index)
+    samplers = simulate.model_samplers(r, forecasts, params, residuals)
+    assert set(samplers) == set(forecasts)
+    hs = samplers["Historical simulation"](np.random.default_rng(0), 200)
+    assert np.isin(hs[:, 0], r.iloc[500:1000]).all()   # the 500 days before day 1000
+    res = backtest.backtest_all(r, forecasts, samplers)
+    assert res["es_z2_p"].between(0, 1).all()

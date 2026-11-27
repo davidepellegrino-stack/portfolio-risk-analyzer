@@ -81,8 +81,8 @@ def test_run_all_fits_garch_once_and_returns_the_parameters_used(normal_returns,
     calls = []
     original = models.garch_models
 
-    def counted(returns):
-        calls.append(original(returns))
+    def counted(returns, **kwargs):
+        calls.append(original(returns, **kwargs))
         return calls[-1]
 
     monkeypatch.setattr(models, "garch_models", counted)

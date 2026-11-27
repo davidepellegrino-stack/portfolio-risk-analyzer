@@ -104,7 +104,8 @@ def ewma_normal(returns: pd.Series, lam: float = cfg.EWMA_LAMBDA,
 # ── 4 and 5. GARCH(1,1)-t and filtered historical simulation ────────────────
 
 def garch_models(returns: pd.Series, window: int = cfg.GARCH_WINDOW,
-                 refit: int = cfg.GARCH_REFIT, start: int = cfg.BURN_IN
+                 refit: int = cfg.GARCH_REFIT, start: int = cfg.BURN_IN,
+                 residuals: dict | None = None
                  ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """GARCH(1,1) with Student-t innovations, and FHS built on the same volatility.
 
@@ -120,6 +121,8 @@ def garch_models(returns: pd.Series, window: int = cfg.GARCH_WINDOW,
               1999). GARCH supplies the volatility, the data supply the tail shape.
 
     Returns (garch_t forecasts, fhs forecasts, fitted parameters by refit date).
+    If a dict is passed as `residuals`, it is filled with the standardised
+    residuals of each estimation window, keyed by refit date.
     """
     from arch import arch_model
 
@@ -134,6 +137,8 @@ def garch_models(returns: pd.Series, window: int = cfg.GARCH_WINDOW,
             resid = r[t - window:t] / fit.conditional_volatility
             sigma2_prev, r_prev = fit.conditional_volatility[-1] ** 2, r[t - 1]
             params.append((returns.index[t], omega, a, b, nu))
+            if residuals is not None:
+                residuals[returns.index[t]] = resid
         sigma2 = omega + a * r_prev**2 + b * sigma2_prev
         sigma = np.sqrt(sigma2) / 100.0
 
@@ -152,13 +157,13 @@ def garch_models(returns: pd.Series, window: int = cfg.GARCH_WINDOW,
             pd.DataFrame(params, columns=["date", "omega", "alpha", "beta", "nu"]).set_index("date"))
 
 
-def run_all(returns: pd.Series) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
+def run_all(returns: pd.Series, residuals: dict | None = None) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
     """All five models on the same out-of-sample dates.
 
     Returns (forecasts by model name, GARCH parameters by refit date). GARCH-t
     and FHS share one set of fits, so the parameters saved are the ones used.
     """
-    garch_t, fhs, garch_params = garch_models(returns)
+    garch_t, fhs, garch_params = garch_models(returns, residuals=residuals)
     forecasts = {
         "Historical simulation": historical_simulation(returns),
         "Normal (rolling)": normal_rolling(returns),

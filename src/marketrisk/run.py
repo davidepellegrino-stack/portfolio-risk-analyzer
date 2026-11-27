@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from . import attribution, backtest, config as cfg, data, models, plots, stress
+from . import attribution, backtest, config as cfg, data, models, plots, simulate, stress
 
 
 def main(refresh: bool = False) -> None:
@@ -16,11 +16,13 @@ def main(refresh: bool = False) -> None:
     port = data.portfolio_returns(asset_returns, weights)
     print(f"{len(port)} daily returns, {port.index[0].date()} to {port.index[-1].date()}, in {cfg.BASE_CCY}")
 
-    forecasts, garch_params = models.run_all(port)
+    residuals: dict = {}
+    forecasts, garch_params = models.run_all(port, residuals=residuals)
     oos = next(iter(forecasts.values())).index
     print(f"Out-of-sample: {len(oos)} days from {oos[0].date()}")
 
-    results = backtest.backtest_all(port, forecasts)
+    samplers = simulate.model_samplers(port, forecasts, garch_params, residuals)
+    results = backtest.backtest_all(port, forecasts, samplers)
     results.to_csv(cfg.TABLES_DIR / "backtest_summary.csv", float_format="%.4f")
     pd.concat(forecasts, axis=1).to_csv(cfg.TABLES_DIR / "forecasts.csv", float_format="%.6f")
     garch_params.to_csv(cfg.TABLES_DIR / "garch_parameters.csv", float_format="%.4f")

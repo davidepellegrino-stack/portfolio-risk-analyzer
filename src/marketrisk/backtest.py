@@ -13,6 +13,8 @@ import pandas as pd
 from scipy import stats
 from scipy.special import xlogy   # xlogy(0, 0) = 0, the convention the LR tests need
 
+from .simulate import Sampler
+
 
 def exceedances(returns: pd.Series, var: pd.Series) -> pd.Series:
     """True on days when the loss was larger than the VaR forecast."""
@@ -124,6 +126,30 @@ def es_z2(returns: pd.Series, var: pd.Series, es: pd.Series, alpha: float) -> fl
     return float((returns[hits] / (len(returns) * alpha * es[hits])).sum() + 1.0)
 
 
+def es_z2_test(var: pd.Series, es: pd.Series, alpha: float, sampler: Sampler,
+               z2_obs: float, n_sim: int = 10_000, seed: int = 0,
+               chunk: int = 1_000) -> tuple[float, float]:
+    """Simulated Z2 test. H0: r_t is drawn from the model's predictive distribution.
+
+    Each simulation draws one return per day from that distribution and
+    recomputes Z2 with the same VaR and ES forecasts. The test is one-sided
+    (only Z2 far below zero means risk was understated):
+
+        p = (1 + #{Z2_sim <= Z2_obs}) / (n_sim + 1)
+
+    Returns (p-value, simulated 5% critical value of Z2).
+    """
+    v, e = var.to_numpy(), es.to_numpy()
+    rng = np.random.default_rng(seed)
+    sims = []
+    for done in range(0, n_sim, chunk):
+        r = sampler(rng, min(chunk, n_sim - done))
+        sims.append(np.where(r < -v, r / e, 0.0).sum(axis=1) / (len(v) * alpha) + 1.0)
+    z = np.concatenate(sims)
+    p = (1 + np.count_nonzero(z <= z2_obs)) / (n_sim + 1)
+    return float(p), float(np.quantile(z, 0.05))
+
+
 def pinball_loss(returns: pd.Series, var: pd.Series, alpha: float) -> float:
     """Average quantile loss of the VaR forecast (lower is better). The quantile
     is the forecast that minimises this loss, so it gives a fair ranking of VaR models."""
@@ -146,14 +172,17 @@ def fz0_loss(returns: pd.Series, var: pd.Series, es: pd.Series, alpha: float) ->
 
 
 def backtest_model(returns: pd.Series, forecast: pd.DataFrame,
-                   var_alpha: float = 0.01, es_alpha: float = 0.025) -> dict:
-    """Every statistic for one model, on the dates where it has a forecast."""
+                   var_alpha: float = 0.01, es_alpha: float = 0.025,
+                   sampler: Sampler | None = None) -> dict:
+    """Every statistic for one model, on the dates where it has a forecast.
+
+    With a `sampler` (see simulate.py) Z2 also gets a simulated p-value."""
     r = returns.loc[forecast.index]
     hits = exceedances(r, forecast["var_99"])
     x, T = int(hits.sum()), len(hits)
     roll = rolling_exceedances(hits)
     zones = roll.map(lambda n: traffic_light(int(n)))
-    return {
+    stats_by_name = {
         "days": T,
         "exceedances": x,
         "expected": round(T * var_alpha, 1),
@@ -171,7 +200,14 @@ def backtest_model(returns: pd.Series, forecast: pd.DataFrame,
         "fz0_loss": fz0_loss(r, forecast["var_975"], forecast["es_975"], es_alpha),
         "mean_var_99_%": round(100 * forecast["var_99"].mean(), 3),
     }
+    if sampler is not None:
+        p, crit = es_z2_test(forecast["var_975"], forecast["es_975"], es_alpha,
+                             sampler, stats_by_name["es_z2"])
+        stats_by_name.update({"es_z2_p": p, "es_z2_crit_5%": crit})
+    return stats_by_name
 
 
-def backtest_all(returns: pd.Series, forecasts: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    return pd.DataFrame({name: backtest_model(returns, f) for name, f in forecasts.items()}).T
+def backtest_all(returns: pd.Series, forecasts: dict[str, pd.DataFrame],
+                 samplers: dict[str, Sampler] | None = None) -> pd.DataFrame:
+    return pd.DataFrame({name: backtest_model(returns, f, sampler=samplers[name] if samplers else None)
+                         for name, f in forecasts.items()}).T

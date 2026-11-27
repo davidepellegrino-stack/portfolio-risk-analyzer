@@ -37,7 +37,9 @@ The first 1,000 days are used for estimation only. Every model then forecasts ea
 | Dynamic quantile (4 lags + VaR), p | <0.001 | <0.001 | <0.001 | <0.001 | <0.001 |
 | Worst 250-day window, exceedances | 14 | 17 | 13 | 11 | 10 |
 | Share of 250-day windows in Basel red zone | 12.4% | 24.4% | 4.4% | 1.9% | 0.1% |
-| ES test Z2 (97.5%; below −0.7 rejects) | −0.30 | −0.65 | −0.65 | −0.18 | **−0.06** |
+| ES test Z2 (97.5%) | −0.30 | −0.65 | −0.65 | −0.18 | **−0.06** |
+| Z2 simulated p-value | 0.046 | <0.001 | <0.001 | 0.11 | **0.34** |
+| Z2 simulated 5% critical value | −0.29 | −0.23 | −0.23 | −0.25 | −0.24 |
 | Quantile loss, ×10⁻⁴ (lower is better) | 5.40 | 5.41 | 4.40 | 4.14 | **4.09** |
 | FZ0 loss for VaR and ES (lower is better) | −3.253 | −3.220 | −3.417 | −3.480 | −3.480 |
 | Average 99% VaR | 3.28% | 2.80% | 2.64% | 2.93% | 3.05% |
@@ -48,7 +50,7 @@ What the table says:
 2. **Historical simulation is slow, not cheap.** It has the highest average VaR and still fails, because the VaR is flat going into a crisis and stays high for two years after it. On 12 March 2020 the portfolio lost 10.5%; historical simulation forecast 3.1%, filtered HS 8.8%.
 3. **Capital is not the trade-off.** Filtered HS has a lower average VaR than historical simulation (3.05% against 3.28%) and spends less time outside the green zone (24% of 250-day windows against 37%). It puts the capital on the right days.
 4. **No model is clean.** Filtered HS has exactly the expected number of exceedances, but independence is rejected (p = 0.014): several exceedances come on consecutive days at the start of each shock, before GARCH volatility has caught up. Conditional coverage sits on the 5% line (p = 0.0497). The dynamic quantile test, which also looks at lags two to four and at the VaR level, rejects all five. For GARCH-t and filtered HS the VaR level is not the issue (with the intercept and VaR alone, p = 0.71 and 0.93): the rejection comes from the lags. The chi-squared p-value rests on very few pairs of exceedances at 99%, so read its size with caution.
-5. **ES is harder to reject than VaR.** No model fails Z2, although the two normal models are close to the threshold. With about 50 tail observations the test has little power, which is a known weakness of ES backtesting.
+5. **A fixed Z2 threshold was too lenient here.** The usual rule of thumb (reject below −0.7) passes all five models. Simulating Z2 under each model's own predictive distribution (10,000 draws of the 2,028 days, one-sided) puts the 5% critical value between −0.23 and −0.29: both normal models are rejected (p < 0.001), and historical simulation only marginally (p = 0.046). GARCH-t and filtered HS are not rejected. With about 50 expected tail observations, not rejecting is weak evidence.
 
 ![Exceedances over the trailing 250 days against the Basel zones](results/figures/traffic_light.png)
 
@@ -77,7 +79,7 @@ git clone https://github.com/davidepellegrino-stack/portfolio-risk-analyzer.git
 cd portfolio-risk-analyzer
 pip install -e ".[dev]"
 python -m marketrisk.run      # downloads data once, writes results/ (about 15 seconds)
-pytest -q                     # 39 tests, no network
+pytest -q                     # 44 tests, no network
 ```
 
 Yahoo Finance revises adjusted prices when dividends are paid, so a fresh download can move the figures slightly.
@@ -88,6 +90,7 @@ src/marketrisk/
   data.py          EUR conversion, calendar, simple returns, portfolio P&L
   models.py        the five VaR / ES forecasters
   backtest.py      Kupiec, Christoffersen, DQ, traffic light, Z2, scoring losses
+  simulate.py      draws from each model's predictive distribution, for the Z2 p-value
   stress.py        historical scenarios, worst losses, stressed VaR
   attribution.py   component VaR and component ES
   run.py           end-to-end pipeline
@@ -104,6 +107,7 @@ The tests check numbers, not only that the code runs:
 - Student-t ES against numerical integration of the density.
 - No look-ahead: changing future returns leaves every past forecast unchanged, for all five models.
 - On simulated normal data the true model passes every backtest, and an ES forecast cut in half is rejected by Z2.
+- Simulated Z2: each sampler breaches its own VaR 2.5% of the time; a model with 30% too little volatility is rejected; historical simulation draws only from past returns.
 - Component VaR and component ES add up to the portfolio totals.
 
 ## Limitations
@@ -113,7 +117,7 @@ The tests check numbers, not only that the code runs:
 - **One-day horizon.** A 10-day figure would need overlapping returns or square-root-of-time scaling, and each has its own problems.
 - **Closing times differ.** US stocks close four and a half hours after Paris, and the Yahoo EUR/USD fix is not taken at either close. Correlations between the US and European positions are therefore understated at daily frequency.
 - **Hypothetical P&L only.** Fixed weights, no intraday trading, no fees. Basel backtesting uses both hypothetical and actual P&L.
-- **Z2 is read against a fixed threshold** of −0.7 (Acerbi and Szekely, 2014) instead of a p-value simulated from each model.
+- **The Z2 p-value treats the forecasts as given.** It draws each day from the predictive distribution with the estimated parameters, so estimation error is not included. For historical and filtered historical simulation that distribution is a bootstrap of the window, which cannot produce a loss larger than the worst one in it (before rescaling by volatility).
 - **About 20 exceedances** in eight years. All coverage tests have low power at 99%.
 
 ## References
