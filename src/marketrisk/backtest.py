@@ -93,6 +93,27 @@ def dynamic_quantile(hits: np.ndarray, var: np.ndarray, alpha: float,
     return dq, float(stats.chi2.sf(dq, rank))   # rank < columns if a regressor is constant
 
 
+def dq_test_mc(var: np.ndarray, alpha: float, dq_obs: float, lags: int = 4,
+               n_sim: int = 10_000, seed: int = 0) -> tuple[float, float]:
+    """Monte Carlo p-value of the DQ statistic.
+
+    With about 20 exceedances the chi-squared limit is a poor guide: one pair of
+    exceedances a few days apart moves DQ a lot. Under H0 the hits are i.i.d.
+    Bernoulli(alpha) whatever the VaR is, so they can be drawn directly. Each
+    draw is run through the same regression against the observed VaR series:
+
+        p = (1 + #{DQ_sim >= DQ_obs}) / (n_sim + 1)
+
+    Returns (p-value, simulated 5% critical value of DQ).
+    """
+    rng = np.random.default_rng(seed)
+    sims = np.array([dynamic_quantile(rng.random(len(var)) < alpha, var, alpha, lags)[0]
+                     for _ in range(n_sim)])
+    # The statistic is discrete in the hits: count equal values despite rounding noise.
+    p = (1 + np.count_nonzero(sims >= dq_obs * (1 - 1e-9))) / (n_sim + 1)
+    return float(p), float(np.quantile(sims, 0.95))
+
+
 def traffic_light(n_exceed: int, n_obs: int = 250, alpha: float = 0.01) -> str:
     """Basel zone from the binomial CDF of the exceedance count under a correct model.
 
@@ -176,7 +197,7 @@ def backtest_model(returns: pd.Series, forecast: pd.DataFrame,
                    sampler: Sampler | None = None) -> dict:
     """Every statistic for one model, on the dates where it has a forecast.
 
-    With a `sampler` (see simulate.py) Z2 also gets a simulated p-value."""
+    With a `sampler` (see simulate.py) Z2 and DQ also get simulated p-values."""
     r = returns.loc[forecast.index]
     hits = exceedances(r, forecast["var_99"])
     x, T = int(hits.sum()), len(hits)
@@ -204,6 +225,9 @@ def backtest_model(returns: pd.Series, forecast: pd.DataFrame,
         p, crit = es_z2_test(forecast["var_975"], forecast["es_975"], es_alpha,
                              sampler, stats_by_name["es_z2"])
         stats_by_name.update({"es_z2_p": p, "es_z2_crit_5%": crit})
+        var_99 = forecast["var_99"].to_numpy()
+        dq = dynamic_quantile(hits.to_numpy(), var_99, var_alpha)[0]
+        stats_by_name["dq_p_mc"] = dq_test_mc(var_99, var_alpha, dq)[0]
     return stats_by_name
 
 

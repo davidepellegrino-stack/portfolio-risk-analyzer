@@ -35,6 +35,7 @@ The first 1,000 days are used for estimation only. Every model then forecasts ea
 | Christoffersen independence, p | 0.001 | <0.001 | 0.084 | 0.031 | 0.014 |
 | Conditional coverage, p | <0.001 | <0.001 | <0.001 | 0.071 | 0.050 |
 | Dynamic quantile (4 lags + VaR), p | <0.001 | <0.001 | <0.001 | <0.001 | <0.001 |
+| Dynamic quantile, Monte Carlo p | <0.001 | <0.001 | <0.001 | 0.009 | 0.003 |
 | Worst 250-day window, exceedances | 14 | 17 | 13 | 11 | 10 |
 | Share of 250-day windows in Basel red zone | 12.4% | 24.4% | 4.4% | 1.9% | 0.1% |
 | ES test Z2 (97.5%) | −0.30 | −0.65 | −0.65 | −0.18 | **−0.06** |
@@ -49,7 +50,7 @@ What the table says:
 1. **The normal tail is the problem, not only the volatility.** EWMA volatility reacts within days and nearly removes the clustering (independence p = 0.08), yet it still has 44 exceedances. A fast volatility with a normal quantile is too low at 99%.
 2. **Historical simulation is slow, not cheap.** It has the highest average VaR and still fails, because the VaR is flat going into a crisis and stays high for two years after it. On 12 March 2020 the portfolio lost 10.5%; historical simulation forecast 3.1%, filtered HS 8.8%.
 3. **Capital is not the trade-off.** Filtered HS has a lower average VaR than historical simulation (3.05% against 3.28%) and spends less time outside the green zone (24% of 250-day windows against 37%). It puts the capital on the right days.
-4. **No model is clean.** Filtered HS has exactly the expected number of exceedances, but independence is rejected (p = 0.014): several exceedances come on consecutive days at the start of each shock, before GARCH volatility has caught up. Conditional coverage sits on the 5% line (p = 0.0497). The dynamic quantile test, which also looks at lags two to four and at the VaR level, rejects all five. For GARCH-t and filtered HS the VaR level is not the issue (with the intercept and VaR alone, p = 0.71 and 0.93): the rejection comes from the lags. The chi-squared p-value rests on very few pairs of exceedances at 99%, so read its size with caution.
+4. **No model is clean.** Filtered HS has exactly the expected number of exceedances, but independence is rejected (p = 0.014): several exceedances come on consecutive days at the start of each shock, before GARCH volatility has caught up. Conditional coverage sits on the 5% line (p = 0.0497). The dynamic quantile test, which also looks at lags two to four and at the VaR level, rejects all five. For GARCH-t and filtered HS the VaR level is not the issue (with the intercept and VaR alone, p = 0.71 and 0.93): the rejection comes from the lags. The chi-squared p-value rests on very few pairs of exceedances at 99% and is far too small here. Drawing the exceedances as i.i.d. Bernoulli(1%) against each observed VaR series (10,000 draws) puts the 5% critical value between 16.7 and 17.0, against 12.6 for chi-squared with 6 degrees of freedom; in a separate check on the GARCH-t VaR series (20,000 draws), the nominal 5% chi-squared test rejected a correct model 9.4% of the time and the nominal 1% test 5.0%. With simulated p-values all five are still rejected, but for GARCH-t (p = 0.009) and filtered HS (p = 0.003) the evidence is much weaker than the chi-squared values below 0.001 suggest.
 5. **A fixed Z2 threshold was too lenient here.** The usual rule of thumb (reject below −0.7) passes all five models. Simulating Z2 under each model's own predictive distribution (10,000 draws of the 2,028 days, one-sided) puts the 5% critical value between −0.23 and −0.29: both normal models are rejected (p < 0.001), and historical simulation only marginally (p = 0.046). GARCH-t and filtered HS are not rejected. With about 50 expected tail observations, not rejecting is weak evidence.
 
 ![Exceedances over the trailing 250 days against the Basel zones](results/figures/traffic_light.png)
@@ -78,8 +79,8 @@ Every position is 12.5% of the portfolio, but ASML carries 19% of the normal VaR
 git clone https://github.com/davidepellegrino-stack/portfolio-risk-analyzer.git
 cd portfolio-risk-analyzer
 pip install -e ".[dev]"
-python -m marketrisk.run      # downloads data once, writes results/ (about 15 seconds)
-pytest -q                     # 44 tests, no network
+python -m marketrisk.run      # downloads data once, writes results/ (about 30 seconds)
+pytest -q                     # 46 tests, no network
 ```
 
 Yahoo Finance revises adjusted prices when dividends are paid, so a fresh download can move the figures slightly.
@@ -107,6 +108,7 @@ The tests check numbers, not only that the code runs:
 - Student-t ES against numerical integration of the density.
 - No look-ahead: changing future returns leaves every past forecast unchanged, for all five models.
 - On simulated normal data the true model passes every backtest, and an ES forecast cut in half is rejected by Z2.
+- Monte Carlo DQ: p-value bounds and reproducibility; paired exceedances are rejected, randomly placed ones are not.
 - Simulated Z2: each sampler breaches its own VaR 2.5% of the time; a model with 30% too little volatility is rejected; historical simulation draws only from past returns.
 - Component VaR and component ES add up to the portfolio totals.
 

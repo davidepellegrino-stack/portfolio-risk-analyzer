@@ -197,3 +197,24 @@ def test_model_samplers_use_only_past_returns_and_the_refit_in_use(normal_return
     assert np.isin(hs[:, 0], r.iloc[500:1000]).all()   # the 500 days before day 1000
     res = backtest.backtest_all(r, forecasts, samplers)
     assert res["es_z2_p"].between(0, 1).all()
+
+
+def test_dq_monte_carlo_p_value_bounds_and_reproducibility():
+    var = np.random.default_rng(0).uniform(0.02, 0.03, 500)
+    def run(dq_obs):
+        return backtest.dq_test_mc(var, 0.01, dq_obs, n_sim=199)
+    assert run(1e12)[0] == pytest.approx(1 / 200)      # never zero
+    assert run(0.0)[0] == pytest.approx(1.0)
+    assert run(5.0) == run(5.0)
+
+
+def test_dq_monte_carlo_agrees_with_the_data():
+    """No exceedance pattern is rejected; exceedances in pairs two days apart are."""
+    var = np.random.default_rng(0).uniform(0.02, 0.03, 2000)
+    paired, random = np.zeros(2000, dtype=int), np.zeros(2000, dtype=int)
+    starts = np.arange(100, 2000, 200)
+    paired[starts] = paired[starts + 2] = 1
+    random[np.random.default_rng(5).choice(2000, 20, replace=False)] = 1
+    for hits, low, high in [(paired, 0.0, 0.01), (random, 0.05, 1.0)]:
+        dq = backtest.dynamic_quantile(hits, var, 0.01)[0]
+        assert low <= backtest.dq_test_mc(var, 0.01, dq, n_sim=999)[0] <= high
