@@ -50,6 +50,39 @@ def empirical_tail(sample: np.ndarray, alpha: float) -> tuple[float, float]:
     return -q, -sample[sample <= q].mean()
 
 
+# ── Cornish-Fisher expansion ────────────────────────────────────────────────
+
+def cornish_fisher_tail(alpha: float, skew, exkurt):
+    """VaR and ES of a unit-variance loss, normal quantile corrected for skewness S
+    and excess kurtosis K (fourth-order Cornish-Fisher):
+
+        q(z) = z + (z^2 - 1) S/6 + (z^3 - 3z) K/24 - (2z^3 - 5z) S^2/36
+
+    VaR = -q(z_alpha). ES = -(1/alpha) x integral of q(z) phi(z) up to z_alpha:
+
+        ES = phi(a)/alpha x [1 + a S/6 + (a^2 - 1) K/24 - (2a^2 - 1) S^2/36],  a = z_alpha
+
+    With S = K = 0 both are the normal values. Works on scalars or arrays.
+    """
+    a = stats.norm.ppf(alpha)
+    q = a + (a**2 - 1) * skew / 6 + (a**3 - 3 * a) * exkurt / 24 - (2 * a**3 - 5 * a) * skew**2 / 36
+    es = stats.norm.pdf(a) / alpha * (1 + a * skew / 6 + (a**2 - 1) * exkurt / 24
+                                      - (2 * a**2 - 1) * skew**2 / 36)
+    return -q, es
+
+
+def cornish_fisher_is_monotone(skew, exkurt):
+    """True where q(z) increases for every z, so that it is a valid quantile function.
+    q'(z) = c2 z^2 + c1 z + c0 must never be negative."""
+    skew, exkurt = np.asarray(skew, dtype=float), np.asarray(exkurt, dtype=float)
+    c2 = exkurt / 8 - skew**2 / 6
+    c1 = skew / 3
+    c0 = 1 - exkurt / 8 + 5 * skew**2 / 36
+    upward = (c2 > 0) & (c1**2 <= 4 * c2 * c0)
+    constant = (c2 == 0) & (c1 == 0) & (c0 >= 0)
+    return upward | constant
+
+
 def _frame(index, var_99, var_975, es_975) -> pd.DataFrame:
     return pd.DataFrame({"var_99": var_99, "var_975": var_975, "es_975": es_975}, index=index)
 
@@ -79,6 +112,25 @@ def normal_rolling(returns: pd.Series, window: int = cfg.NORMAL_WINDOW,
     sigma = returns.rolling(window).std().shift(1).iloc[start:]
     return _frame(sigma.index, normal_var(cfg.VAR_ALPHA) * sigma,
                   normal_var(cfg.ES_ALPHA) * sigma, normal_es(cfg.ES_ALPHA) * sigma)
+
+
+def cornish_fisher_rolling(returns: pd.Series, window: int = cfg.NORMAL_WINDOW,
+                           start: int = cfg.BURN_IN) -> pd.DataFrame:
+    """The rolling normal model with its tail corrected for the sample skewness and
+    excess kurtosis of the same window. Same sigma and zero mean, so any difference
+    comes from the tail. The sample moments go straight into the expansion; they are
+    not the exact moments of the corrected distribution (Maillard, 2012).
+
+    Adds the columns `skew`, `exkurt` and `monotone` (False: outside the domain
+    where the expansion is a valid quantile function).
+    """
+    roll = returns.rolling(window)
+    sigma, skew, exkurt = (x.shift(1).iloc[start:] for x in (roll.std(), roll.skew(), roll.kurt()))
+    unit_var_99, _ = cornish_fisher_tail(cfg.VAR_ALPHA, skew, exkurt)
+    unit_var_975, unit_es = cornish_fisher_tail(cfg.ES_ALPHA, skew, exkurt)
+    out = _frame(sigma.index, unit_var_99 * sigma, unit_var_975 * sigma, unit_es * sigma)
+    return out.assign(skew=skew, exkurt=exkurt,
+                      monotone=cornish_fisher_is_monotone(skew, exkurt))
 
 
 # ── 3. EWMA (RiskMetrics) ───────────────────────────────────────────────────

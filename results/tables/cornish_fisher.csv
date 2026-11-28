@@ -1,0 +1,3 @@
+,days,exceedances,expected,hit_rate_%,kupiec_p,independence_p,cond_coverage_p,dq_p,max_exceed_250d,green_%,yellow_%,red_%,es_z2,pinball_loss_x1e4,fz0_loss,mean_var_99_%
+Normal (rolling),2028.0000,44.0000,20.3000,2.1700,0.0000,0.0000,0.0000,0.0000,17.0000,49.9000,25.7000,24.4000,-0.6456,5.4142,-3.2198,2.7950
+Cornish-Fisher (rolling),2028.0000,26.0000,20.3000,1.2800,0.2212,0.0000,0.0000,0.0000,11.0000,68.9000,27.1000,4.0000,-0.1005,5.1043,-3.3099,3.7820

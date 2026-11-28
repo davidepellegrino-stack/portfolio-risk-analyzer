@@ -55,6 +55,22 @@ What the table says:
 
 ![Exceedances over the trailing 250 days against the Basel zones](results/figures/traffic_light.png)
 
+### Does a Cornish-Fisher correction rescue the normal model?
+
+A common fix for the normal tail is to keep the same volatility and adjust the quantile for the sample skewness and excess kurtosis (here from the same 250 days). It is a side comparison, not one of the five models, so it has no simulated p-values.
+
+| | Normal | Cornish-Fisher |
+|---|---|---|
+| Exceedances (20.3 expected) | 44 | 26 |
+| Kupiec coverage, p | <0.001 | 0.22 |
+| Christoffersen independence, p | <0.001 | <0.001 |
+| ES test Z2 (97.5%) | −0.65 | −0.10 |
+| Quantile loss, ×10⁻⁴ | 5.41 | 5.10 |
+| FZ0 loss | −3.220 | −3.310 |
+| Average 99% VaR | 2.80% | 3.78% |
+
+Coverage improves a lot and both scoring losses fall, but the exceedances still cluster, because the volatility is the same slow one. The price is an average VaR of 3.78%, well above GARCH-t (2.93%), which has fewer exceedances (24) and lower losses. On 47 of 2,028 days the sample moments fall outside the region where the expansion is monotone, so it is not a valid quantile function on those days; the forecasts are kept as they are (1 of the 26 exceedances falls on such a day). Excess kurtosis reaches 18, far from the near-normal case the expansion is built for.
+
 ## Stress tests
 
 VaR describes ordinary bad days. These are the losses of today's portfolio through past episodes:
@@ -80,7 +96,7 @@ git clone https://github.com/davidepellegrino-stack/portfolio-risk-analyzer.git
 cd portfolio-risk-analyzer
 pip install -e ".[dev]"
 python -m marketrisk.run      # downloads data once, writes results/ (about 30 seconds)
-pytest -q                     # 46 tests, no network
+pytest -q                     # 56 tests, no network
 ```
 
 Yahoo Finance revises adjusted prices when dividends are paid, so a fresh download can move the figures slightly.
@@ -89,7 +105,7 @@ Yahoo Finance revises adjusted prices when dividends are paid, so a fresh downlo
 src/marketrisk/
   config.py        every parameter that affects a result
   data.py          EUR conversion, calendar, simple returns, portfolio P&L
-  models.py        the five VaR / ES forecasters
+  models.py        the five VaR / ES forecasters, plus the Cornish-Fisher comparison
   backtest.py      Kupiec, Christoffersen, DQ, traffic light, Z2, scoring losses
   simulate.py      draws from each model's predictive distribution, for the Z2 p-value
   stress.py        historical scenarios, worst losses, stressed VaR
@@ -106,7 +122,8 @@ The tests check numbers, not only that the code runs:
 - Kupiec and Christoffersen statistics against hand calculations; the traffic light against the Basel table (4 / 5 / 9 / 10 exceedances).
 - Dynamic quantile: equals the coverage score test with no lags and a flat VaR; catches exceedances two days apart, or tied to the VaR level, that the other tests miss.
 - Student-t ES against numerical integration of the density.
-- No look-ahead: changing future returns leaves every past forecast unchanged, for all five models.
+- No look-ahead: changing future returns leaves every past forecast unchanged, for all five models and the Cornish-Fisher comparison.
+- Cornish-Fisher: normal values when skew and excess kurtosis are zero; the closed-form ES matches numerical integration; the monotonicity check agrees with a grid.
 - On simulated normal data the true model passes every backtest, and an ES forecast cut in half is rejected by Z2.
 - Monte Carlo DQ: p-value bounds and reproducibility; paired exceedances are rejected, randomly placed ones are not.
 - Simulated Z2: each sampler breaches its own VaR 2.5% of the time; a model with 30% too little volatility is rejected; historical simulation draws only from past returns.
@@ -130,8 +147,10 @@ The tests check numbers, not only that the code runs:
 - Basel Committee on Banking Supervision (2019). Minimum capital requirements for market risk.
 - Christoffersen, P. (1998). Evaluating interval forecasts. *International Economic Review* 39(4).
 - Engle, R. and Manganelli, S. (2004). CAViaR: conditional autoregressive Value at Risk by regression quantiles. *Journal of Business & Economic Statistics* 22(4).
+- Cornish, E. and Fisher, R. (1938). Moments and cumulants in the specification of distributions. *Revue de l'Institut International de Statistique* 5(4).
 - Fissler, T. and Ziegel, J. (2016). Higher order elicitability and Osband's principle. *Annals of Statistics* 44(4).
 - Kupiec, P. (1995). Techniques for verifying the accuracy of risk measurement models. *Journal of Derivatives* 3(2).
+- Maillard, D. (2012). A user's guide to the Cornish Fisher expansion. SSRN working paper 1997178.
 - McNeil, A., Frey, R. and Embrechts, P. (2015). *Quantitative Risk Management*, revised edition. Princeton University Press.
 - Patton, A., Ziegel, J. and Chen, R. (2019). Dynamic semiparametric models for expected shortfall (and Value-at-Risk). *Journal of Econometrics* 211(2).
 

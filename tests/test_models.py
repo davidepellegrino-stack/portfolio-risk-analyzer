@@ -42,7 +42,7 @@ def test_ewma_recursion_by_hand():
 
 
 @pytest.mark.parametrize("model", [models.historical_simulation, models.normal_rolling,
-                                   models.ewma_normal])
+                                   models.ewma_normal, models.cornish_fisher_rolling])
 def test_no_look_ahead(normal_returns, model):
     """Changing returns from day 1500 onwards must not change any forecast up to day 1500."""
     r = normal_returns.iloc[:1600]
@@ -91,3 +91,27 @@ def test_run_all_fits_garch_once_and_returns_the_parameters_used(normal_returns,
     assert forecasts["GARCH-t"] is calls[0][0] and forecasts["Filtered HS"] is calls[0][1]
     assert params is calls[0][2]
     assert len({tuple(f.index) for f in forecasts.values()}) == 1   # same out-of-sample dates
+
+
+def test_cornish_fisher_without_skew_or_kurtosis_is_normal():
+    var, es = models.cornish_fisher_tail(0.025, 0.0, 0.0)
+    assert var == pytest.approx(models.normal_var(0.025))
+    assert es == pytest.approx(models.normal_es(0.025))
+
+
+def test_cornish_fisher_es_is_the_integral_of_its_quantile():
+    skew, exkurt, alpha = -0.5, 2.0, 0.025
+    integral, _ = integrate.quad(
+        lambda u: -models.cornish_fisher_tail(u, skew, exkurt)[0], 0, alpha)
+    var, es = models.cornish_fisher_tail(alpha, skew, exkurt)
+    assert es == pytest.approx(-integral / alpha, rel=1e-6)
+    assert es > var > models.normal_var(alpha)      # left skew and fat tails raise both
+
+
+@pytest.mark.parametrize("skew, exkurt", [(0.0, 0.0), (-0.5, 2.0), (0.0, 7.9), (0.0, 8.1),
+                                          (1.5, 0.5), (-3.0, 18.0), (0.0, -0.5)])
+def test_cornish_fisher_monotonicity_matches_a_grid_check(skew, exkurt):
+    z = np.linspace(-60, 60, 200_001)
+    q = (z + (z**2 - 1) * skew / 6 + (z**3 - 3 * z) * exkurt / 24
+         - (2 * z**3 - 5 * z) * skew**2 / 36)
+    assert bool(models.cornish_fisher_is_monotone(skew, exkurt)) == bool((np.diff(q) >= 0).all())

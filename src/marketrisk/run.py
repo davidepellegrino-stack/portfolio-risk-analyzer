@@ -23,6 +23,15 @@ def main(refresh: bool = False) -> None:
 
     samplers = simulate.model_samplers(port, forecasts, garch_params, residuals)
     results = backtest.backtest_all(port, forecasts, samplers)
+    # Side comparison, not one of the five models: rolling normal with a corrected tail.
+    cf = models.cornish_fisher_rolling(port)
+    cf_results = backtest.backtest_all(port, {"Normal (rolling)": forecasts["Normal (rolling)"],
+                                              "Cornish-Fisher (rolling)": cf})
+    cf_results.to_csv(cfg.TABLES_DIR / "cornish_fisher.csv", float_format="%.4f")
+    print("\nCornish-Fisher\n", cf_results.T,
+          f"\nDays outside the monotone domain: {int((~cf['monotone']).sum())} of {len(cf)}",
+          "\n", cf[["skew", "exkurt"]].describe(), sep="")
+
     results.to_csv(cfg.TABLES_DIR / "backtest_summary.csv", float_format="%.4f")
     pd.concat(forecasts, axis=1).to_csv(cfg.TABLES_DIR / "forecasts.csv", float_format="%.6f")
     garch_params.to_csv(cfg.TABLES_DIR / "garch_parameters.csv", float_format="%.4f")
